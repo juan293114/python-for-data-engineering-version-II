@@ -205,3 +205,76 @@ fino (ej. hora pico de radiación), pero no es la fuente de los KPIs actuales de
 **Decisión:** ningún commit de este repositorio debe incluir `Co-Authored-By` ni mención
 equivalente a asistencia de IA, en ningún commit, de ningún proyecto del repo. Regla global,
 puesta en `CLAUDE.md` en la raíz, no solo aquí.
+
+---
+
+## 12. Limitación conocida: `uv_index` / `uv_index_max` siempre nulo en histórico
+
+**Contexto:** al correr `B_Bronze/1_bronze` en Databricks salió un `FutureWarning` de pandas
+en `pd.concat` sobre columnas "empty or all-NA". Se replicó la misma lógica en
+`Proyecto/local/` para diagnosticar: `uv_index_max` viene `NULL` en el 100% de las filas
+`historical` (confirmado también llamando directo a `archive-api.open-meteo.com`, sin
+nuestro código de por medio) y en 0% de las de `forecast`.
+
+**Causa real:** la Historical Weather API de Open-Meteo (basada en reanálisis ERA5) no
+calcula índice UV — es un derivado que solo producen los modelos de pronóstico. No depende
+de la ubicación ni de la fecha pedida, siempre va a venir nulo para `historical`.
+
+**Por qué no requiere una decisión de diseño:** `uv_index`/`uv_index_max` están tipados
+`float64` en Silver (no `int`), así que el `NULL` no rompe el `.astype()`. Ningún KPI de
+Gold (`kpi_agro_daily`, `kpi_energy_daily`, `kpi_climate_risk_daily`) usa esta columna, así
+que no afecta ningún resultado actual del pipeline.
+
+**Consecuencia:** si en el futuro se agrega un KPI basado en UV, solo va a poder calcularse
+para la ventana de pronóstico (16 días), nunca para el histórico — limitación de la fuente
+de datos, no del código de este proyecto.
+
+---
+
+## 13. Bug corregido: `DELTA_FAILED_TO_MERGE_FIELDS` en `dim_time`
+
+**Contexto:** `D_Gold/2_gold_dim_time` falló en Databricks con
+`[DELTA_FAILED_TO_MERGE_FIELDS] Failed to merge fields 'date' and 'date'`.
+
+**Causa:** la columna `date` se construía con `pd.to_datetime(...)`, que en pandas queda
+como `datetime64[ns]`. `spark.createDataFrame` mapea ese tipo a `TIMESTAMP`, pero la tabla
+está declarada como `date DATE` — Delta no fusiona `TIMESTAMP` con `DATE` automáticamente
+aunque `mergeSchema=true`.
+
+**Fix:** agregar `dim["date"] = dim["date"].dt.date` justo antes de `spark.createDataFrame`,
+después de calcular todas las columnas derivadas que sí necesitan `.dt` (año, mes, etc.),
+para que la columna quede como `date` de Python (objeto) y Spark la mapee a `DATE`.
+
+**Por qué no pasó en el prototipo local:** `Proyecto/local/04_gold.py` arma `dim_time` con
+`generate_series` de DuckDB directamente sobre columnas `DATE`, sin pasar por
+`pd.to_datetime`, así que nunca tuvo este problema. El bug era específico de la traducción
+a pandas/Spark del notebook de producción.
+
+---
+
+## 14. Bug corregido: mismos `DELTA_FAILED_TO_MERGE_FIELDS`, pero `INT` vs `BIGINT`
+
+**Contexto:** después de arreglar `date`, `dim_time` volvió a fallar en Databricks, esta vez
+con `Failed to merge fields 'week_of_year' and 'week_of_year'`. Se auditó el resto de
+notebooks de Gold en busca del mismo patrón antes de que el usuario los corriera y
+aparecieran uno por uno.
+
+**Causa:** el mismo problema del punto 13, pero entre enteros de distinto ancho. Se probó
+localmente con pandas real (no supuesto) qué tipo produce cada transformación:
+
+| Columna | Origen | dtype real (pandas) | Tipo declarado | ¿Coincide? |
+|---|---|---|---|---|
+| `year` / `quarter` / `month` / `day` | `.dt.year` etc. | `int32` | `INT` | Sí |
+| `week_of_year` | `.dt.isocalendar().week.astype(int)` | `int64` | `INT` | **No** |
+| `dim_weather_code.weather_code` | lista de tuplas → `pd.DataFrame(...)` | `int64` | `INT` | **No** |
+| `fact_weather_daily.weather_code` | pasa directo desde `silver_weather.weather_daily` (que Silver nunca declara con `CREATE TABLE`, así que Spark infirió `BIGINT` desde el `int64` de pandas) | `int64` / `BIGINT` | `INT` | **No** |
+
+**Fix:** en vez de forzar `.astype("int32")` en cada punto (frágil, hay que acordarse en
+cada notebook nuevo), se cambió el DDL de esas tres columnas a `BIGINT` — así coincide con
+lo que pandas/Spark producen de forma natural en todo el pipeline. `year`/`quarter`/`month`/
+`day` se dejaron como `INT` porque ahí sí coinciden con el `int32` real de pandas.
+
+**Consecuencia práctica:** si se agrega una columna entera nueva en cualquier notebook de
+Gold, declararla `BIGINT` por defecto salvo que venga de un accessor `.dt.` de pandas
+(`year`, `month`, `day`, `quarter`, `hour`, etc.), que sí son `int32`. Evita repetir este
+mismo bug en el próximo KPI que se agregue.
