@@ -3,7 +3,7 @@
 
 ---
 
-### 👥 Realziado por:
+### 👥 Realizado por:
 - Dominguez Huacho Yaneth Marilu
 
 ---
