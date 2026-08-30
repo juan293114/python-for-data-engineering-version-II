@@ -39,3 +39,11 @@ desktop.ini
 # --- Datos / logs locales ---
 *.log
 *.tmp
+
+# --- Proyecto: prototipado local (pandas + DuckDB), nunca es producción ---
+Proyecto/local/
+*.duckdb
+*.duckdb.wal
+
+# --- Instrucciones locales para Claude Code, no se sube al repo ---
+/CLAUDE.md
