@@ -278,3 +278,37 @@ lo que pandas/Spark producen de forma natural en todo el pipeline. `year`/`quart
 Gold, declararla `BIGINT` por defecto salvo que venga de un accessor `.dt.` de pandas
 (`year`, `month`, `day`, `quarter`, `hour`, etc.), que sí son `int32`. Evita repetir este
 mismo bug en el próximo KPI que se agregue.
+
+**Corrección posterior:** esta última recomendación (dejar `year`/`quarter`/`month`/`day`
+como `INT`) resultó incompleta — ver punto 15, terminaron siendo `BIGINT` también.
+
+---
+
+## 15. Bug corregido: Databricks Serverless sube TODO entero de pandas a `LongType`
+
+**Contexto:** con `week_of_year` y `date` ya arreglados, `dim_time` volvió a fallar en la
+corrida real del job (`run_id 32505658398990`, tarea `dim_time`), ahora con
+`Failed to merge fields 'year' and 'year'` → `DELTA_MERGE_INCOMPATIBLE_DATATYPE:
+IntegerType and LongType`. Esto contradice la tabla del punto 14, donde se había confirmado
+con pandas local que `.dt.year` da `int32`.
+
+**Causa real:** la traza del error muestra `pyspark/sql/connect/readwriter.py` — Databricks
+Free Edition ejecuta los notebooks en **Serverless compute**, que usa **Spark Connect**
+(cliente gRPC + Arrow), no el motor clásico de Spark. El punto 14 solo probó qué dtype
+produce pandas (`int32`), pero no cómo lo convierte *este* motor específico al pasar por
+`spark.createDataFrame(pandas_df)`. En la práctica, Spark Connect en Serverless normaliza
+cualquier entero de pandas a `LongType` (`BIGINT`), sin importar si pandas lo tenía en
+`int32` o `int64`. No hay forma de verificar esto sin correr contra el motor real — por eso
+se coló incluso después de "confirmarlo localmente" con pandas puro.
+
+**Fix:** `year`, `quarter`, `month`, `day` en `dim_time` pasan de `INT` a `BIGINT`. Con esto,
+**todas** las columnas enteras que vienen de pandas en todo Gold quedan en `BIGINT`; ninguna
+se queda en `INT`. Las únicas columnas no-`BIGINT`/`STRING`/`DOUBLE` que quedan son `date`
+(`DATE`, con el fix del punto 13) y los `BOOLEAN` de los KPIs (esos sí calzan bien porque
+pandas `bool`/`numpy.bool_` se mapea consistente a `BooleanType`).
+
+**Regla a futuro (reemplaza la del punto 14):** en este proyecto, **cualquier** columna
+entera construida con pandas y escrita a una tabla de Gold con esquema fijo se declara
+`BIGINT`, sin excepciones — incluidos los accessors `.dt.` de pandas. Solo las columnas
+armadas con Spark SQL puro (como en `fact_weather_daily`, con `CAST(... AS BIGINT)`
+explícito) tienen el tipo garantizado por el propio `CAST`, no por inferencia.
