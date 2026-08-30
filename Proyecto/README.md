@@ -9,6 +9,10 @@ Sigue la misma arquitectura medallón (`Raw → Bronze → Silver → Gold`) que
 migrar a Databricks Free. El porqué de cada decisión de diseño está en
 [`DECISIONS.md`](DECISIONS.md); este documento explica el *qué* y el *cómo*.
 
+Documentación adicional:
+- [`docs/codigo/`](docs/codigo/00_indice.md) — el código explicado celda por celda, para estudiar.
+- [`docs/powerbi_dashboard.md`](docs/powerbi_dashboard.md) — qué gráficas armar en Power BI sobre las tablas Gold.
+
 ## Fuente de datos
 
 Dos endpoints de Open-Meteo, sin API key (uso no comercial):
