@@ -17,10 +17,6 @@ medallón sobre Databricks (`Proyecto/`).
 │
 └── Proyecto/            Proyecto propio: ETL de clima para Perú, arquitectura medallón
     ├── README.md         Qué hace el proyecto, arquitectura, catálogo de tablas y KPIs
-    ├── DECISIONS.md       Por qué cada decisión de diseño quedó como quedó
-    ├── docs/
-    │   ├── codigo/        Código explicado celda por celda, para estudiar
-    │   └── powerbi_dashboard.md   Qué gráficas armar en Power BI sobre las tablas Gold
     ├── config/            Semilla de datos (25 regiones de Perú con lat/lon)
     ├── A_Raw/             Ingesta cruda desde la API de Open-Meteo
     ├── B_Bronze/          JSON crudo → tablas Delta anchas
@@ -47,6 +43,3 @@ Power BI.
 
 Para el detalle completo (arquitectura, cómo correrlo en local, cómo migrarlo a Databricks,
 catálogo de tablas y fórmulas de cada KPI) ver [`Proyecto/README.md`](Proyecto/README.md).
-Para entender por qué cada decisión de diseño quedó así (y qué alternativas se descartaron)
-ver [`Proyecto/DECISIONS.md`](Proyecto/DECISIONS.md). Para estudiar el código en detalle,
-celda por celda, ver [`Proyecto/docs/codigo/`](Proyecto/docs/codigo/00_indice.md).

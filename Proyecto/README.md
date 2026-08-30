@@ -6,12 +6,7 @@ dominios: **agricultura**, **energía renovable** y **riesgo climático**.
 
 Sigue la misma arquitectura medallón (`Raw → Bronze → Silver → Gold`) que
 [`Modulos/01_ELT/`](../Modulos/01_ELT/), pensado para correr primero en local y luego
-migrar a Databricks Free. El porqué de cada decisión de diseño está en
-[`DECISIONS.md`](DECISIONS.md); este documento explica el *qué* y el *cómo*.
-
-Documentación adicional:
-- [`docs/codigo/`](docs/codigo/00_indice.md) — el código explicado celda por celda, para estudiar.
-- [`docs/powerbi_dashboard.md`](docs/powerbi_dashboard.md) — qué gráficas armar en Power BI sobre las tablas Gold.
+migrar a Databricks Free.
 
 ## Fuente de datos
 
@@ -49,7 +44,7 @@ Proyecto/
 Catálogo Databricks: `workspace` (único disponible en Databricks Free). Cada capa usa el
 mismo esquema de siglas que `01_ELT` (`<capa>_weather`), pero con sufijo `_weather` para que
 ambos proyectos convivan en el mismo workspace sin pisarse — un `DROP DATABASE ... CASCADE`
-en un proyecto no toca las tablas del otro (ver [DECISIONS.md #9](DECISIONS.md)).
+en un proyecto no toca las tablas del otro.
 
 | Capa | Tipo | Nombre en Databricks |
 |---|---|---|
@@ -84,8 +79,7 @@ una con todas las columnas que trae su bloque de la API (`hourly` / `daily`) má
 
 Se separan hourly/daily porque el bloque `daily` de Open-Meteo ya viene agregado por día
 local (`timezone=auto`) y es la fuente directa de `fact_weather_daily` en Gold — no hace
-falta que este proyecto re-agregue horas a mano (ver
-[DECISIONS.md #10](DECISIONS.md)).
+falta que este proyecto re-agregue horas a mano.
 
 ### Silver
 
@@ -116,8 +110,8 @@ COMMENT 'Capa Gold: dimensiones, hechos y KPIs de clima';
 **Hecho base**
 
 - `fact_weather_daily` — grano día × ubicación. Tipado/renombrado desde
-  `silver_weather.weather_daily` (no se re-agrega desde `weather_hourly`, ver
-  [DECISIONS.md #10](DECISIONS.md)): `temp_max`, `temp_min`, `temp_mean`,
+  `silver_weather.weather_daily` (no se re-agrega desde `weather_hourly`):
+  `temp_max`, `temp_min`, `temp_mean`,
   `precipitation_sum`, `wind_speed_max`,
   `wind_gusts_max`, `shortwave_radiation_sum`, `et0_fao_evapotranspiration`, `uv_index_max`,
   `sunshine_duration`, `data_type`.
@@ -128,8 +122,8 @@ COMMENT 'Capa Gold: dimensiones, hechos y KPIs de clima';
 
 | KPI | Fórmula | Nota |
 |---|---|---|
-| `frost_risk` | `temp_min <= 0` | Umbral SENAMHI, ver [DECISIONS.md #5](DECISIONS.md) |
-| `growing_degree_days` | `max(0, temp_mean - 10)` | Base 10 °C, supuesto genérico — ver [DECISIONS.md #6](DECISIONS.md) |
+| `frost_risk` | `temp_min <= 0` | Umbral SENAMHI |
+| `growing_degree_days` | `max(0, temp_mean - 10)` | Base 10 °C, supuesto genérico |
 | `irrigation_deficit_mm` | `max(0, et0_fao_evapotranspiration - precipitation_sum)` | mm de riego necesarios si la lluvia no cubre la evapotranspiración |
 
 #### `kpi_energy_daily`
@@ -138,14 +132,14 @@ COMMENT 'Capa Gold: dimensiones, hechos y KPIs de clima';
 |---|---|---|
 | `solar_potential_mj_m2` | `shortwave_radiation_sum` | ya viene en MJ/m² desde la API |
 | `sunshine_hours` | `sunshine_duration / 3600` | |
-| `wind_power_class` | banda por `wind_speed_max` (calmo/moderado/fuerte/muy fuerte) | escala tipo Beaufort, no curva de potencia real — ver [DECISIONS.md #6](DECISIONS.md) |
+| `wind_power_class` | banda por `wind_speed_max` (calmo/moderado/fuerte/muy fuerte) | escala tipo Beaufort, no curva de potencia real |
 
 #### `kpi_climate_risk_daily`
 
 | KPI | Fórmula | Nota |
 |---|---|---|
 | `frost_alert` | `temp_min <= 0` | mismo criterio que `frost_risk`, vista de "alerta" en vez de "riesgo agro" |
-| `heat_alert` | `temp_max >= 30` | umbral único para todo el país, supuesto débil — ver [DECISIONS.md #6](DECISIONS.md) |
+| `heat_alert` | `temp_max >= 30` | umbral único para todo el país, supuesto débil |
 | `heavy_rain_alert` | `precipitation_sum >= 20` | mm en 24h |
 
 ## Cómo correr en local
@@ -180,9 +174,9 @@ COMMENT 'Capa Gold: dimensiones, hechos y KPIs de clima';
 
 ## Estado actual
 
-Los tres tracks están implementados y `Proyecto/local/` corrió de punta a punta contra la
-API real (25 ubicaciones): ingesta, bronze, silver y las 7 tablas Gold, con resultados que
-tienen sentido físico (ej. Pasco y Huancavelica concentran los días de helada, Piura los
-días de calor). Los notebooks de `A_Raw` → `D_Gold` están escritos a partir de esa lógica
-validada, pero **no se han corrido todavía dentro de un workspace de Databricks real** —
-falta esa validación antes de darlos por probados en producción.
+Los tres tracks están implementados y validados de punta a punta: `Proyecto/local/` corrió
+completo contra la API real (25 ubicaciones), y los notebooks de `A_Raw` → `D_Gold` también
+corrieron completos dentro de un workspace de Databricks Free real (ingesta, bronze, silver
+y las 7 tablas Gold), con los mismos conteos de fila que el prototipo local y resultados con
+sentido físico (ej. Pasco y Huancavelica concentran los días de helada, Piura los días de
+calor).

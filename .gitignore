@@ -45,5 +45,9 @@ Proyecto/local/
 *.duckdb
 *.duckdb.wal
 
+# --- Proyecto: documentacion interna, se queda solo en local ---
+Proyecto/DECISIONS.md
+Proyecto/docs/
+
 # --- Instrucciones locales para Claude Code, no se sube al repo ---
 /CLAUDE.md
